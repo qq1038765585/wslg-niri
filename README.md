@@ -64,7 +64,7 @@ binds {
 ```
 
 ```
-Similar configurations can prevent WSL from automatically shutting down:
+Similar configurations can prevent WSL for auto shutdown:
 spawn-sh-at-startup "/mnt/c/Windows/System32/wsl.exe -- swaybg -c 333333"
 ```
 
