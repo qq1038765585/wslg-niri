@@ -2382,6 +2382,9 @@ impl State {
                     self.niri.queue_redraw_mru_output();
                 }
             }
+            Action::SwitchNextMonitor => {
+                self.backend.headless().switch_next_monitor();
+            }
         }
     }
 

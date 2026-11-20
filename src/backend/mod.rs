@@ -105,7 +105,8 @@ impl Backend {
                     ModKey::Alt
                 }
             }),
-            Backend::Tty(_) | Backend::Headless(_) => config.input.mod_key.unwrap_or(ModKey::Super),
+            Backend::Tty(_) => config.input.mod_key.unwrap_or(ModKey::Super),
+            Backend::Headless(_) => config.input.mod_key.unwrap_or(ModKey::Alt)
         }
     }
 

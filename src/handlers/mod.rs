@@ -5,7 +5,7 @@ mod xdg_shell;
 
 use std::fs::File;
 use std::io::Write;
-use std::os::fd::OwnedFd;
+use std::os::fd::{IntoRawFd, OwnedFd};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -53,7 +53,7 @@ use smithay::wayland::selection::primary_selection::{
 use smithay::wayland::selection::wlr_data_control::{
     DataControlHandler as WlrDataControlHandler, DataControlState as WlrDataControlState,
 };
-use smithay::wayland::selection::{SelectionHandler, SelectionTarget};
+use smithay::wayland::selection::{SelectionHandler, SelectionSource, SelectionTarget};
 use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
 };
@@ -282,29 +282,74 @@ delegate_input_method_manager!(State);
 delegate_keyboard_shortcuts_inhibit!(State);
 delegate_virtual_keyboard_manager!(State);
 
+pub enum SelectionUserDataType {
+    Local(Vec<u8>),
+
+    Remote {
+        op_id: u32,
+        mime_types: Vec<String>
+    }
+}
+
 impl SelectionHandler for State {
-    type SelectionUserData = Arc<[u8]>;
+    type SelectionUserData = Arc<SelectionUserDataType>;
+
+    fn new_selection(&mut self, ty: SelectionTarget, source_opt: Option<SelectionSource>, _seat: Seat<Self>) {
+        if ty != SelectionTarget::Clipboard { return; }
+
+        let Some(source) = source_opt else {
+            self.backend
+                .headless()
+                .wsland_clipboard_clear();
+            return;
+        };
+
+        let mime_types = source.mime_types();
+        self.backend
+            .headless()
+            .wsland_clipboard_format_list(mime_types);
+    }
 
     fn send_selection(
         &mut self,
-        _ty: SelectionTarget,
-        _mime_type: String,
+        ty: SelectionTarget,
+        mime_type: String,
         fd: OwnedFd,
         _seat: Seat<Self>,
         user_data: &Self::SelectionUserData,
     ) {
         let _span = tracy_client::span!("send_selection");
 
-        let buf = user_data.clone();
-        thread::spawn(move || {
-            // Clear O_NONBLOCK, otherwise File::write_all() will stop halfway.
-            if let Err(err) = fcntl_setfl(&fd, OFlags::empty()) {
-                warn!("error clearing flags on selection target fd: {err:?}");
+        match user_data.clone().as_ref() {
+            SelectionUserDataType::Remote { op_id, mime_types } => {
+                if ty != SelectionTarget::Clipboard { return; }
+
+                if mime_types.iter().find(|v| {
+                    v == &&mime_type
+                }).is_some() {
+                    let raw_fd = fd.into_raw_fd();
+
+                    self.backend
+                        .headless()
+                        .wsland_clipboard_callback(op_id, mime_type, raw_fd);
+                }
             }
-            if let Err(err) = File::from(fd).write_all(&buf) {
-                warn!("error writing selection: {err:?}");
+
+            SelectionUserDataType::Local(arc_buf) => {
+                let buf = arc_buf.clone();
+
+                thread::spawn(move || {
+                    // Clear O_NONBLOCK, otherwise File::write_all() will stop halfway.
+                    if let Err(err) = fcntl_setfl(&fd, OFlags::empty()) {
+                        warn!("error clearing flags on selection target fd: {err:?}");
+                    }
+
+                    if let Err(err) = File::from(fd).write_all(buf.as_slice()) {
+                        warn!("error writing selection: {err:?}");
+                    }
+                });
             }
-        });
+        }
     }
 }
 

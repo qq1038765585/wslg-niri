@@ -127,7 +127,7 @@ use crate::dbus::gnome_shell_introspect::{self, IntrospectToNiri, NiriToIntrospe
 #[cfg(feature = "dbus")]
 use crate::dbus::gnome_shell_screenshot::{NiriToScreenshot, ScreenshotToNiri};
 use crate::frame_clock::FrameClock;
-use crate::handlers::{configure_lock_surface, XDG_ACTIVATION_TOKEN_TIMEOUT};
+use crate::handlers::{configure_lock_surface, SelectionUserDataType, XDG_ACTIVATION_TOKEN_TIMEOUT};
 use crate::input::pick_color_grab::PickColorGrab;
 use crate::input::scroll_swipe_gesture::ScrollSwipeGesture;
 use crate::input::scroll_tracker::ScrollTracker;
@@ -717,7 +717,7 @@ impl State {
             || env::var_os("DISPLAY").is_some();
 
         let mut backend = if headless {
-            let headless = Headless::new();
+            let headless = Headless::new(config.clone(), event_loop.clone());
             Backend::Headless(headless)
         } else if has_display {
             let winit = Winit::new(config.clone(), event_loop.clone())?;
@@ -2432,7 +2432,11 @@ impl Niri {
             .unwrap();
 
         let socket_name = create_wayland_socket.then(|| {
-            let socket_source = ListeningSocketSource::new_auto().unwrap();
+            let mut socket_source_r = ListeningSocketSource::with_name("wayland-0");
+            if socket_source_r.is_err() {
+                socket_source_r = ListeningSocketSource::new_auto();
+            }
+            let socket_source = socket_source_r.unwrap();
             let socket_name = socket_source.socket_name().to_os_string();
             event_loop
                 .insert_source(socket_source, move |client, _, state| {
@@ -3764,6 +3768,66 @@ impl Niri {
         }
     }
 
+    pub fn render_cursor<R: NiriRenderer>(
+        &self,
+        renderer: &mut R,
+        output: &Output,
+        push: &mut dyn FnMut(Rectangle<i32, Physical>, PointerRenderElements<R>),
+    ) {
+        let _span = tracy_client::span!("Niri::render_pointer");
+        let output_scale = output.current_scale();
+
+        // Get the render cursor to draw.
+        let cursor_scale = output_scale.integer_scale();
+        let render_cursor = self.cursor_manager.get_render_cursor(cursor_scale);
+
+        let output_scale = Scale::from(output.current_scale().fractional_scale());
+
+        match render_cursor {
+            RenderCursor::Hidden => (),
+            RenderCursor::Surface { surface, hotspot } => {
+                let pointer_pos = hotspot.to_f64().to_physical_precise_round(output_scale);
+
+                push_elements_from_surface_tree(
+                    renderer,
+                    &surface,
+                    Point::new(0, 0),
+                    output_scale,
+                    1.,
+                    Kind::Cursor,
+                    &mut |elem| {
+                        push(Rectangle::new(pointer_pos, elem.geometry(output_scale).size), elem.into());
+                    },
+                );
+            }
+            RenderCursor::Named {
+                icon,
+                scale,
+                cursor,
+            } => {
+                let (idx, frame) = cursor.frame(self.start_time.elapsed().as_millis() as u32);
+                let hotspot = XCursor::hotspot(frame).to_logical(scale);
+                let pointer_pos = hotspot.to_f64().to_physical_precise_round(output_scale);
+
+                let texture = self.cursor_texture_cache.get(icon, scale, &cursor, idx);
+                match MemoryRenderBufferRenderElement::from_buffer(
+                    renderer,
+                    Point::new(0.0, 0.0),
+                    &texture,
+                    None,
+                    None,
+                    None,
+                    Kind::Cursor,
+                ) {
+                    Ok(elem) => push(Rectangle::new(pointer_pos, elem.geometry(output_scale).size), elem.into()),
+                    Err(err) => {
+                        warn!("error importing a cursor texture: {err:?}");
+                    }
+                }
+            }
+        }
+    }
+
     /// Checks if the pointer should be included on a window cast or screenshot.
     ///
     /// Returns `(cursor_global_pos, win_pos)` if the pointer should be included, or `None`
@@ -4209,8 +4273,12 @@ impl Niri {
         };
 
         // The pointer goes on the top.
-        if include_pointer && self.pointer_visibility.is_visible() {
-            self.render_pointer(ctx.renderer, output, &mut |elem| push(elem.into()));
+        if self.pointer_visibility.is_visible() {
+            self.render_pointer(ctx.renderer, output, &mut |elem| {
+                if include_pointer || elem.kind() == Kind::ScanoutCandidate {
+                    push(elem.into());
+                }
+            });
         }
 
         // Next, the screen transition texture.
@@ -5672,7 +5740,7 @@ impl Niri {
                         &state.niri.display_handle,
                         &state.niri.seat,
                         vec![String::from("image/png")],
-                        buf.clone(),
+                        Arc::new(SelectionUserDataType::Local(buf.clone().to_vec())),
                     );
                 }
                 calloop::channel::Event::Closed => (),

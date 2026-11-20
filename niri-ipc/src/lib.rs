@@ -943,6 +943,8 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg(long))]
         path: Option<String>,
     },
+    /// Switch Use Next Monitor.
+    SwitchNextMonitor {}
 }
 
 /// Change in window or column size.

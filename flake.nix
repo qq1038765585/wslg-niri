@@ -184,6 +184,72 @@
           pkgs = nixpkgsFor.${system};
           rust-bin = rust-overlay.lib.mkRustBin { } pkgs;
           inherit (self.packages.${system}) niri;
+
+          ws_freerdp = pkgs.stdenv.mkDerivation {
+            pname = "freerdp";
+            version = "3.32.2";
+
+            src = pkgs.fetchFromGitHub {
+              owner = "FreeRDP";
+              repo = "FreeRDP";
+              tag = "3.32.2";
+              hash = "sha256-qLZLD0t/mwxcwdigRZ7I1L7ZhDplW5RNUH6R+x+Os7Y=";
+            };
+
+            nativeBuildInputs = with pkgs; [
+              pkg-config cmake ninja
+            ];
+
+            buildInputs = with pkgs; [
+              zlib openssl icu
+            ];
+
+            cmakeFlags = [
+              "-G Ninja"
+              "-DCMAKE_BUILD_TYPE=Debug"
+              "-DCMAKE_INSTALL_LIBDIR=lib"
+              "-DWITH_DEBUG_ALL=OFF"
+              "-DWITH_VERBOSE_WINPR_ASSERT=OFF"
+              "-DWITH_ICU=ON"
+              "-DWITH_SERVER=ON"
+              "-DCHANNEL_GFXREDIR=ON"
+              "-DWITH_OPENSSL=ON"
+              "-DWITH_INTERNAL_RC4=ON"
+              "-DWITH_INTERNAL_MD4=ON"
+              "-DWITH_INTERNAL_MD5=ON"
+              "-DWITH_FFMPEG=OFF"
+              "-DWITH_DSP_FFMPEG=OFF"
+              "-DWITH_VIDEO_FFMPEG=OFF"
+              "-DWITH_SWSCALE=OFF"
+              "-DWITH_KRB5=OFF"
+              "-DWITH_CLIENT=OFF"
+              "-DWITH_CLIENT_COMMON=OFF"
+              "-DWITH_CLIENT_CHANNELS=OFF"
+              "-DWITH_CLIENT_INTERFACE=OFF"
+              "-DWITH_LIBSYSTEMD=OFF"
+              "-DWITH_WAYLAND=OFF"
+              "-DWITH_X11=OFF"
+              "-DWITH_PROXY=OFF"
+              "-DWITH_SHADOW=OFF"
+              "-DWITH_SAMPLE=OFF"
+            ];
+        };
+
+        ws_wsland = pkgs.stdenv.mkDerivation {
+             pname = "wsland";
+             version = "1.0.0";
+
+             src = ./native;
+             # dontUnpack = true;
+             mesonBuildType = "debug";
+             dontStrip = true;
+
+             nativeBuildInputs = with pkgs; [
+               pkg-config meson ninja
+             ];
+
+             buildInputs = with pkgs; [openssl pixman cairo wayland libxkbcommon] ++ [ws_freerdp];
+         };
         in
         {
           default = pkgs.mkShell {
@@ -208,6 +274,16 @@
                 }
               ))
               pkgs.cargo-insta
+              pkgs.libdisplay-info_0_3
+
+              pkgs.meson
+              pkgs.ninja
+              pkgs.pkg-config
+              pkgs.openssl
+              pkgs.cairo
+              pkgs.libcap
+              ws_freerdp
+              ws_wsland
             ];
 
             nativeBuildInputs = [

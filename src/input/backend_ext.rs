@@ -5,6 +5,7 @@ use smithay::output::Output;
 
 use crate::niri::State;
 use crate::protocols::virtual_pointer::VirtualPointer;
+use crate::wsland::input::WslandVirtualDevice;
 
 pub trait NiriInputBackend: input::InputBackend<Device = Self::NiriDevice> {
     type NiriDevice: NiriInputDevice;
@@ -40,6 +41,12 @@ impl NiriInputDevice for WinitVirtualDevice {
         // instead, we just return None and rely on the fact that it has only one output.
         // doing so causes the cursor to be placed in *global* output coordinates,
         // which are not flipped, and happen to be what we want.
+        None
+    }
+}
+
+impl NiriInputDevice for WslandVirtualDevice {
+    fn output(&self, _state: &State) -> Option<Output> {
         None
     }
 }
