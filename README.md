@@ -10,37 +10,38 @@ Let WSLG use the Niri compositor
 ---
 ### Install
 
-1. Download the latest VHD package.
-
-Example:
-
+##### 1. Download the latest VHD package. Example:
 ```
 system.zip
 ```
 
-2. Extract the downloaded archive.
-
-After extraction, you should get:
-
+##### 2. Extract the downloaded archive. After extraction, you should get:
 ```
 system.vhd
 ```
 
-3. Open **WSL Settings**.
+##### 3. Open **WSL Settings**.
+<img width="754" height="409" alt="image" src="https://github.com/user-attachments/assets/2881adb1-4d69-43bb-a654-f9c1b3d6418f" />
 
-4. Go to:
+##### 4. Go to`Developer -> Custom system distro` then select the extracted `system.vhd` file, example:
+<img width="1284" height="791" alt="image" src="https://github.com/user-attachments/assets/b5912fb7-8602-40a0-a947-037b5c1040ff" />
 
+##### 5. Enter the system distribution version using a terminal:
 ```
-Developer
-    -> Custom system distro
+wsl --system -u wslg
 ```
+<img width="640" height="201" alt="image" src="https://github.com/user-attachments/assets/cbacec9d-1cee-4c6a-8377-333990c79a10" />
 
-5. Select the extracted `system.vhd` file, example:
-   <img width="1284" height="791" alt="image" src="https://github.com/user-attachments/assets/b5912fb7-8602-40a0-a947-037b5c1040ff" />
+##### 6. Copy the default configuration file:
+```
+cp ~/.config/niri/config.kdl /mnt/c/Users/[your user name]/niriconfig.kdl
+```
+<img width="1581" height="213" alt="image" src="https://github.com/user-attachments/assets/41aa4db4-2129-4863-a12a-2abd20275c49" />
 
 ## Configuration
+For configuration instructions, please refer to (https://niri-wm.github.io/niri/Configuration:-Introduction)
 
-configuration file（Alt is the mod key）: https://niri-wm.github.io/niri/Configuration:-Introduction
+configuration file path:
 ```
 C:\ProgramData\Microsoft\WSL\niriconfig.kdl or C:\Users\[your user name]\niriconfig.kdl
 ```
